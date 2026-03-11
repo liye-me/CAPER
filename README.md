@@ -56,7 +56,7 @@ X_s <- ComBat(dat=as.matrix(X_s), batch=as.character(object_s$batch), mod=NULL, 
 
 ##### Outputs
 A list of model outputs:
-- Lambda: Cell-by-latent loading matrix Λ ((n^c+n^s) × (k1+2*k2))
+- Lambda: Cell-by-latent factors
 - E_Z: Posterior mean E[Z|X], where each column corresponds to a gene g.
 - psi_diag: Diagonal of noise covariance.
 ```
