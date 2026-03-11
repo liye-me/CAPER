@@ -44,12 +44,12 @@ X_s <- ComBat(dat=as.matrix(X_s), batch=as.character(object_s$batch), mod=NULL, 
 
 ### CAPER Model
 ##### Inputs
-- X_c: A gene-by-cell matrix for condition c. (G × n^c) → as.matrix(X_c)
-- X_s: A gene-by-cell matrix for condition s. (G × n^s) → as.matrix(X_s)
+- X_c: A gene-by-cell matrix for condition c.
+- X_s: A gene-by-cell matrix for condition s.
 - k1: The number of global latent dimensions.
 - k2: The number of condition-specific latent dimensions.
-- sigma_c: The variance scale for condition c. (mean of per-gene variances)
-- sigma_s: The variance scale for condition s. (mean of per-gene variances)
+- sigma_c: The variance scale for condition c.
+- sigma_s: The variance scale for condition s.
 - max_iter: The maximum number of EM iterations to perform.
 - epsilon: The convergence threshold for the EM algorithm.
 - verbose: If TRUE, progress information will be printed during execution (default is FALSE).
@@ -57,8 +57,8 @@ X_s <- ComBat(dat=as.matrix(X_s), batch=as.character(object_s$batch), mod=NULL, 
 ##### Outputs
 A list of model outputs:
 - Lambda: Cell-by-latent loading matrix Λ ((n^c+n^s) × (k1+2*k2))
-- E_Z: Posterior mean E[Z|X] ((k1+2*k2) × G), where each column corresponds to a gene g and Z_g = [z_g; z_g^c; z_g^s]
-- psi_diag: Diagonal of Ψ (noise covariance), length (n^c+n^s)
+- E_Z: Posterior mean E[Z|X], where each column corresponds to a gene g.
+- psi_diag: Diagonal of noise covariance.
 ```
 sigma_c <- mean(apply(X_c, 1, var))
 sigma_s <- mean(apply(X_s, 1, var))
