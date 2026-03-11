@@ -1,0 +1,52 @@
+#' Condition-associated pattern extraction and recovery in multi-condition single-cell transcriptomics with CAPER
+#'
+#' @description
+#' CAPER is primarily built on a matrix factorization framework that explicitly disentangles 
+#' meaningful biological effects from unwanted variation. CAPER directly generates 
+#' interpretable latent factors and a batch-corrected expression matrix in which 
+#' the biological signal of interest is preserved and isolated, thereby enabling more 
+#' reliable downstream analyses in complex multi-condition single-cell datasets.
+#' 
+#' @param X_c A gene-by-cell matrix for condition c (G x n^c), where G is the number of genes and n^c is the number of cells in condition c.
+#' @param X_s A gene-by-cell matrix for condition s (G x n^s), where G is the number of genes and n^s is the number of cells in condition s.
+#' @param k1 The number of global latent dimensions.
+#' @param k2 The number of condition-specific latent dimensions.
+#' @param sigma_c The variance scale for condition c. This is typically the mean of per-gene variances in condition c.
+#' @param sigma_s The variance scale for condition s. This is typically the mean of per-gene variances in condition s.
+#' @param max_iter The maximum number of EM iterations to perform.
+#' @param epsilon The convergence threshold for the EM algorithm.
+#' @param verbose If TRUE, progress information will be printed during execution (default is FALSE).
+#' 
+#' @return A list containing the following elements:
+#' \describe{
+#'   \item{Lambda}{A matrix of size (n^c + n^s) x (k1 + 2*k2) representing the cell-by-latent factor loading matrix.
+#'                 This matrix includes global latent factors and condition-specific latent factors.}
+#'   \item{E_Z}{A matrix of size (k1 + 2*k2) x G representing the posterior mean of Z given X, 
+#'              where Z_g = [z_g; z_g^c; z_g^s], with z_g, z_g^c, and z_g^s representing global, condition c-specific, 
+#'              and condition s-specific latent factors, respectively.}
+#'   \item{psi_diag}{A vector of length (n^c + n^s) representing the diagonal of the noise covariance matrix Psi. 
+#'                  It contains the variance for each cell in the dataset.}
+#' }
+#'
+#' @examples
+#' # Load input data
+#' data("CAPER_inputs", package = "CAPER") # "X_c" and "X_s"
+#' sigma_c <- mean(apply(X_c, 1, var))     # Calculate variance for condition c
+#' sigma_s <- mean(apply(X_s, 1, var))     # Calculate variance for condition s
+#'
+#' # CAPER Model
+#' res <- CAPER_rcpp(
+#'   X_c = as.matrix(X_c),  # Condition c gene-by-cell matrix
+#'   X_s = as.matrix(X_s),  # Condition s gene-by-cell matrix
+#'   k1 = 30, k2 = 10,      # Latent dimensions
+#'   sigma_c = sigma_c,     # Variance for condition c
+#'   sigma_s = sigma_s,     # Variance for condition s
+#'   max_iter = 10000,      # Maximum iterations
+#'   epsilon = 0.001,       # Convergence threshold
+#'   verbose = FALSE        # If TRUE, progress information will be printed during execution
+#' )
+#'
+#' @export
+CAPER_rcpp <- function(X_c, X_s, k1, k2, sigma_c, sigma_s, max_iter, epsilon, verbose = FALSE) {
+  .Call(`_CAPER_CAPER_rcpp`, X_c, X_s, k1, k2, sigma_c, sigma_s, max_iter, epsilon, verbose)
+}

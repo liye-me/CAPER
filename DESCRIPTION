@@ -1,0 +1,14 @@
+Package: CAPER
+Type: Package
+Title: Condition-associated pattern extraction and recovery in multi-condition single-cell transcriptomics
+Version: 0.1.1
+Author: Shiquan Sun, Ye Li, Jin Ning
+Maintainer: Ye Li <liye_me@stu.xjtu.edu.cn>
+Description: CAPER is primarily built on a matrix factorization framework that explicitly disentangles meaningful biological effects from unwanted variation. CAPER directly generates interpretable latent factors and a batch-corrected expression matrix in which the biological signal of interest is preserved and isolated, thereby enabling more reliable downstream analyses in complex multi-condition single-cell datasets.
+License: GPL (>= 2)
+Depends: R (>= 4.0.2)
+Imports: Rcpp (>= 1.0.14)
+LinkingTo: Rcpp, RcppArmadillo
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
