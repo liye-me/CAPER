@@ -3,22 +3,11 @@
 // Author: Shiquan Sun; Ye Li; Jin Ning 
 // Condition-associated pattern extraction and recovery in multi-condition single-cell transcriptomics with CAPER
 //******************************************************************************//
-#include <fstream>
 #include <RcppArmadillo.h>
 // [[Rcpp::depends(RcppArmadillo)]]
-#include <R.h>
-#include <Rmath.h>
-#include <cmath>
-#include <stdio.h>
-#include <stdlib.h>
-#include <cstring>
-#include <ctime>
 
-using namespace std;
 using namespace arma;
 using namespace Rcpp;
-
-#define ARMA_DONT_PRINT_ERRORS
 
 // diag(I) where I = diag(I_{k1}, sigma_c I_{k2}, sigma_s I_{k2})
 arma::vec Itilde(const int k1, const int k2, const double sigma_c, const double sigma_s){
@@ -43,8 +32,8 @@ arma::mat UpdateItildeLambdaT(const arma::mat& Lambda,
   return I_LambdaT;
 }// end func
 
-// (Psi + Lambda * I * Lambda^T)^(-1) via Woodbury (Psi is diagonal stored as psi_diag)
-arma::mat FastInverseMatV2(const arma::vec& psi_diag,
+// Posterior weights B, without forming the cell-by-cell inverse.
+arma::mat PosteriorWeights(const arma::vec& psi_diag,
                            const arma::mat& Lambda,
                            const arma::mat& I_LambdaT) {
   arma::vec Psi_inv_diag = 1.0/(psi_diag + 1e-6);
@@ -54,15 +43,10 @@ arma::mat FastInverseMatV2(const arma::vec& psi_diag,
   arma::mat Kmat = I_LambdaT * PsiInv_Lambda;
   Kmat.diag() += 1.0;
 
-  arma::mat solve_term = solve(Kmat, I_LambdaT_PsiInv, solve_opts::fast);
-  arma::mat inv_mat = -PsiInv_Lambda * solve_term;
-  inv_mat.diag() += Psi_inv_diag;
-
-  return inv_mat;
+  return solve(Kmat, I_LambdaT_PsiInv, solve_opts::fast);
 }// end func
 
 // E-step: posterior moments for Z_g = [z_g; z_g^c; z_g^s]
-// IMPORTANT: keep the exact multiplication structure consistent with the original implementation.
 void ComputeExpVar(const arma::vec& psi_diag,
                    const arma::mat& Lambda,
                    const arma::mat& I_LambdaT,
@@ -72,21 +56,17 @@ void ComputeExpVar(const arma::vec& psi_diag,
                    arma::mat &Var_Z,
                    arma::mat &E_Z_part){
 
-    arma::mat shared_term = FastInverseMatV2(psi_diag, Lambda, I_LambdaT);
-
-    // E_Z_part = I Lambda^T (Psi + Lambda I Lambda^T)^(-1)
-    E_Z_part = I_LambdaT * shared_term;
+    E_Z_part = PosteriorWeights(psi_diag, Lambda, I_LambdaT);
 
     // E[Z | X] = E_Z_part X^T
     E_Z = E_Z_part * X_all.t();
 
     // Var(Z | X) = I - I Lambda^T (Psi + Lambda I Lambda^T)^(-1) Lambda I
-    // Same structure as the original: -E_part * (I_LambdaT)^T + diag(I)
     Var_Z = -E_Z_part * I_LambdaT.t();
     Var_Z.diag() += diag_I;
 }// end func
 
-arma::mat ComputeSVD(const arma::mat X, const int k, const bool flag_sparse){
+arma::mat ComputeSVD(const arma::mat& X, const int k, const bool flag_sparse){
     arma::mat U;
     arma::vec s;
     arma::mat V;
@@ -104,7 +84,7 @@ arma::mat ComputeSVD(const arma::mat X, const int k, const bool flag_sparse){
 }// end func
 
 // initialize Lambda = [Lambda^c, Lambda_u^c, 0; Lambda^s, 0, Lambda_u^s]
-arma::mat ComputeLambda(arma::mat X_c, arma::mat X_s, arma::mat &Lambda,
+void ComputeLambda(const arma::mat& X_c, const arma::mat& X_s, arma::mat &Lambda,
                         const int k1, const int k2,
                         const int n_c, const int n_s){
 
@@ -129,8 +109,18 @@ arma::mat ComputeLambda(arma::mat X_c, arma::mat X_s, arma::mat &Lambda,
     Lambda.submat(0,   k1,    n_c-1,      k1+k2-1)    = Lambda_u_c;
     Lambda.submat(n_c, k1+k2, n_c+n_s-1,  k1+2*k2-1)  = Lambda_u_s;
 
-    return Lambda;
 }// end func
+
+// ||A A^T - B B^T||_F^2 using a 2k-dimensional QR factorization.
+// Working with A-B avoids subtracting large, nearly equal squared norms.
+double LoadingChange(const arma::mat& A, const arma::mat& B){
+    const arma::uword k = A.n_cols;
+    arma::mat Q, R;
+    qr_econ(Q, R, join_rows(A - B, A + B));
+    arma::mat cross = R.cols(0, k-1) * R.cols(k, 2*k-1).t();
+    arma::mat difference = 0.5 * (cross + cross.t());
+    return accu(square(difference));
+}
 
 // [[Rcpp::depends("RcppArmadillo")]]
 // [[Rcpp::export]]
@@ -149,8 +139,8 @@ Rcpp::List CAPER_rcpp(const arma::mat& X_c,
         }
         if (k1 <= 0 || k2 <= 0) {
             Rcpp::stop("k1 and k2 must be positive.");
-        }        
-        
+        }
+
         if (verbose) {
           Rcpp::Rcout << "sigma_c: " << sigma_c << "\n";
           Rcpp::Rcout << "sigma_s: " << sigma_s << "\n";
@@ -179,11 +169,7 @@ Rcpp::List CAPER_rcpp(const arma::mat& X_c,
         arma::mat Lambda_u_s_old = Lambda.submat(n_c, k1+k2, n_c+n_s-1,  k1+2*k2-1);
 
         arma::mat X_all = join_rows(X_c, X_s);
-        arma::mat XtX = X_all.t() * X_all;
-        arma::vec diag_XtX = XtX.diag();
-
-        arma::mat X_all_c = X_all.cols(0, n_c-1);
-        arma::mat X_all_s = X_all.cols(n_c, n_c+n_s-1);
+        arma::vec squared_norms = sum(square(X_all), 0).t();
 
         arma::vec psi_diag = arma::ones<arma::vec>(n_c + n_s);
 
@@ -216,10 +202,10 @@ Rcpp::List CAPER_rcpp(const arma::mat& X_c,
             arma::mat E_z_c = E_Z.rows(k1,      k1+k2-1);
             arma::mat E_z_s = E_Z.rows(k1+k2,   k1+2*k2-1);
 
-            Xc_E_z   = X_all_c.t() * E_z.t();
-            Xs_E_z   = X_all_s.t() * E_z.t();
-            Xc_E_z_c = X_all_c.t() * E_z_c.t();
-            Xs_E_z_s = X_all_s.t() * E_z_s.t();
+            Xc_E_z   = X_c.t() * E_z.t();
+            Xs_E_z   = X_s.t() * E_z.t();
+            Xc_E_z_c = X_c.t() * E_z_c.t();
+            Xs_E_z_s = X_s.t() * E_z_s.t();
 
             Lambda_c_new =
               (Xc_E_z - Lambda_u_c_old * (sum_E_ZZt.submat(0, k1, k1-1, k1+k2-1).t()))
@@ -243,13 +229,15 @@ Rcpp::List CAPER_rcpp(const arma::mat& X_c,
             Lambda_new.submat(0,   k1,    n_c-1,      k1+k2-1)    = Lambda_u_c_new;
             Lambda_new.submat(n_c, k1+k2, n_c+n_s-1,  k1+2*k2-1)  = Lambda_u_s_new;
 
-            arma::mat Apsi = Lambda_new * E_Z_part;
-            arma::vec diag_A_XtX = sum(Apsi % XtX.t(), 1);
-            psi_diag = (diag_XtX - diag_A_XtX) / (double)G;
+            arma::vec fitted_c = sum(Lambda_c_new % Xc_E_z, 1)
+                               + sum(Lambda_u_c_new % Xc_E_z_c, 1);
+            arma::vec fitted_s = sum(Lambda_s_new % Xs_E_z, 1)
+                               + sum(Lambda_u_s_new % Xs_E_z_s, 1);
+            psi_diag = (squared_norms - join_cols(fitted_c, fitted_s)) / (double)G;
             psi_diag.elem(find(psi_diag < 1e-5)).fill(1e-5);
 
             if ((iter > 100) && (iter % 10 == 0)){
-                if (sum(square(vectorise(abs(Lambda * Lambda.t() - Lambda_new * Lambda_new.t())))) < epsilon){
+                if (LoadingChange(Lambda, Lambda_new) < epsilon){
                     if (verbose) Rcpp::Rcout << "## Converged at iter " << iter << "\n";
                     break;
                 }
